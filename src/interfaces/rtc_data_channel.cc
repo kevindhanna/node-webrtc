@@ -106,6 +106,8 @@ void RTCDataChannel::CleanupInternals() {
 
 void RTCDataChannel::OnPeerConnectionClosed() {
   if (_jingleDataChannel != nullptr) {
+    CleanupInternals();
+    HandleStateChange(*this, webrtc::DataChannelInterface::kClosed);
     Stop();
   }
 }
