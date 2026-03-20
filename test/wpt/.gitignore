@@ -1,0 +1,5 @@
+# Downloaded from web-platform-tests/wpt via setup.sh
+webrtc/
+resources/
+common/
+mediacapture-streams/

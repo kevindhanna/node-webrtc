@@ -42,6 +42,7 @@
     "eslint-config-prettier": "^9.1.0",
     "globals": "^15.14.0",
     "husky": "^9.1.7",
+    "jsdom": "^29.0.1",
     "lint-staged": "^15.2.11",
     "node-addon-api": "^7.0.0",
     "patch-package": "^8.0.0",
@@ -57,6 +58,11 @@
     "install-example": "node scripts/install-example.js",
     "lint": "eslint lib/*.js lib/**/*.js test/*.js test/**/*.js scripts/*.js",
     "test": "node --expose-gc test/all.js",
+    "test:wpt": "node scripts/run-wpt-tests.js",
+    "test:wpt:all-pass": "node scripts/run-wpt-tests.js all-pass",
+    "test:wpt:runnable": "node scripts/run-wpt-tests.js runnable",
+    "test:wpt:update": "node scripts/run-wpt-tests.js --update",
+    "test:wpt:setup": "bash test/wpt/setup.sh",
     "prepare": "husky"
   },
   "lint-staged": {
