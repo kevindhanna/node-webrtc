@@ -25,11 +25,6 @@
     "types"
   ],
   "optionalDependencies": {
-    "@roamhq/wrtc-darwin-arm64": "0.10.0",
-    "@roamhq/wrtc-darwin-x64": "0.10.0",
-    "@roamhq/wrtc-linux-arm64": "0.10.0",
-    "@roamhq/wrtc-linux-x64": "0.10.0",
-    "@roamhq/wrtc-win32-x64": "0.10.0",
     "domexception": "^4.0.0"
   },
   "devDependencies": {
@@ -54,6 +49,7 @@
     "patch": "patch-package --error-on-warn",
     "build": "node scripts/build-from-source.js",
     "make-prebuilt": "node scripts/make-prebuilt.js",
+    "install": "node scripts/install-prebuilt.js",
     "install-example": "node scripts/install-example.js",
     "lint": "eslint lib/*.js lib/**/*.js test/*.js test/**/*.js scripts/*.js",
     "test": "node --expose-gc test/all.js",

@@ -1,6 +1,7 @@
 {
   pkgs ? import <nixpkgs> { },
   system ? builtins.currentSystem,
+  ci ? false,
 }:
 let
   lib = pkgs.lib;
@@ -10,10 +11,10 @@ let
     pkgs:
     (
       let
-        apple-sdk = if is-darwin then pkgs.apple-sdk_13 else null;
+        apple-sdk = if is-darwin then pkgs.apple-sdk_15 else null;
         llvm =
           pkgs:
-          pkgs.llvmPackages_17.override {
+          pkgs.llvmPackages_19.override {
             inherit apple-sdk;
           };
         clang = (llvm pkgs).clang;
@@ -76,7 +77,7 @@ let
     );
 
 in
-if is-darwin then
+if is-darwin || ci then
   pkgs.mkShell {
     inherit (env pkgs) nativeBuildInputs shellHook;
   }
