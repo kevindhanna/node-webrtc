@@ -9,7 +9,7 @@ const { extractScriptsFromHtml } = require("./extractScriptsFromHtml.js");
 function runTest(htmlPath) {
   return new Promise((resolve) => {
     const scripts = extractScriptsFromHtml(htmlPath);
-    const { dom, window } = createWindow();
+    const { dom, window, closeAllPeerConnections } = createWindow();
 
     const results = { pass: 0, fail: 0, timeout: 0, notrun: 0, tests: [] };
     let resolved = false;
@@ -20,6 +20,9 @@ function runTest(htmlPath) {
       clearTimeout(fileTimeout);
       process.removeListener("unhandledRejection", onUnhandled);
       process.removeListener("uncaughtException", onUncaught);
+      // Close all PeerConnections before closing the window to prevent
+      // segfaults from WebRTC threads accessing freed memory during exit.
+      closeAllPeerConnections();
       try {
         dom.window.close();
       } catch {
@@ -66,45 +69,49 @@ function runTest(htmlPath) {
         }
         execScript(code);
 
-        // After testharness.js loads, disable DOM output and register
-        // the completion callback immediately (before any test scripts run).
+        // After testharness.js loads, set up the completion callback
+        // BEFORE any test scripts run. Synchronous test() calls complete
+        // during script execution, so the callback must be registered first.
         if (script.type === "file" && script.path.includes("testharness.js")) {
-          execScript(`setup({ output: false });`);
+          /* eslint-disable camelcase */
+          window._on_complete = function (tests) {
+            for (const t of tests) {
+              const status =
+                t.status === 0
+                  ? "PASS"
+                  : t.status === 1
+                    ? "FAIL"
+                    : t.status === 2
+                      ? "TIMEOUT"
+                      : "NOTRUN";
+              results.tests.push({
+                name: t.name,
+                status,
+                message: t.message || "",
+              });
+              if (status === "PASS") results.pass++;
+              else if (status === "FAIL") results.fail++;
+              else if (status === "TIMEOUT") results.timeout++;
+              else results.notrun++;
+            }
+            done();
+          };
+          /* eslint-enable camelcase */
+
+          // Expose cleanup function to jsdom context
+          window._closeAllPCs = closeAllPeerConnections;
+
+          execScript(`
+            setup({ output: false });
+            add_completion_callback(function(tests, harness_status) {
+              _on_complete(tests, harness_status);
+            });
+            add_result_callback(function() {
+              _closeAllPCs();
+            });
+          `);
         }
       }
-
-      // Register completion callback after all scripts are loaded.
-      // _on_complete must be set on window first so it's accessible.
-      /* eslint-disable camelcase */
-      window._on_complete = function (tests) {
-        for (const t of tests) {
-          const status =
-            t.status === 0
-              ? "PASS"
-              : t.status === 1
-                ? "FAIL"
-                : t.status === 2
-                  ? "TIMEOUT"
-                  : "NOTRUN";
-          results.tests.push({
-            name: t.name,
-            status,
-            message: t.message || "",
-          });
-          if (status === "PASS") results.pass++;
-          else if (status === "FAIL") results.fail++;
-          else if (status === "TIMEOUT") results.timeout++;
-          else results.notrun++;
-        }
-        done();
-      };
-
-      execScript(`
-        add_completion_callback(function(tests, harness_status) {
-          _on_complete(tests, harness_status);
-        });
-      `);
-      /* eslint-enable camelcase */
     } catch (err) {
       results.tests.push({
         name: "(load error)",

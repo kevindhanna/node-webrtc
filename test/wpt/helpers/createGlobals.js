@@ -77,7 +77,18 @@ function createWindow() {
     window.DOMException = globalThis.DOMException;
   }
 
-  return { dom, window };
+  function closeAllPeerConnections() {
+    for (const pc of peerConnections) {
+      try {
+        if (pc.connectionState !== "closed") pc.close();
+      } catch {
+        // ignore — PC may already be in a bad state
+      }
+    }
+    peerConnections.length = 0;
+  }
+
+  return { dom, window, closeAllPeerConnections };
 }
 
 module.exports = { createWindow };

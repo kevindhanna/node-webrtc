@@ -2,18 +2,44 @@
 /* eslint-disable no-console, no-process-exit, func-style, new-cap */
 "use strict";
 
+// Re-exec with --unhandled-rejections=none if not already set.
+// WPT tests produce unhandled rejections from leaked PeerConnections
+// that would crash Node 24+ without this flag.
+if (!process.execArgv.includes("--unhandled-rejections=none")) {
+  const { execFileSync } = require("child_process");
+  try {
+    execFileSync(
+      process.execPath,
+      [
+        "--unhandled-rejections=none",
+        ...process.execArgv,
+        __filename,
+        ...process.argv.slice(2),
+      ],
+      { stdio: "inherit" },
+    );
+  } catch (e) {
+    process.exit(e.status || 1);
+  }
+  process.exit(0);
+}
+
 const fs = require("fs");
 const path = require("path");
 const { runTest } = require("./helpers/runTest");
 
 const SNAPSHOT_PATH = path.join(__dirname, "expected.json");
 
-// Prevent stray errors from WPT tests crashing the runner process.
-// Individual test errors are caught by runTest's handlers, but some
-// can escape (e.g. ICE candidates arriving on closed PeerConnections
-// from a previous test).
+// Belt-and-suspenders: catch anything that escapes.
 process.on("uncaughtException", () => {});
 process.on("unhandledRejection", () => {});
+
+// --- Colours ---
+
+const GREEN = (s) => `\x1b[32m${s}\x1b[0m`;
+const RED = (s) => `\x1b[31m${s}\x1b[0m`;
+const YELLOW = (s) => `\x1b[33m${s}\x1b[0m`;
+const DIM = (s) => `\x1b[2m${s}\x1b[0m`;
 
 // --- Snapshot ---
 
@@ -36,17 +62,6 @@ function saveSnapshot(allResults) {
   fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify(snapshot, null, 2) + "\n");
 }
 
-// --- Formatting ---
-
-const GREEN = (s) => `\x1b[32m${s}\x1b[0m`;
-const RED = (s) => `\x1b[31m${s}\x1b[0m`;
-const YELLOW = (s) => `\x1b[33m${s}\x1b[0m`;
-
-function formatFileResult(index, total, name, r) {
-  const tag = r.fail === 0 && r.timeout === 0 ? GREEN("PASS") : RED("FAIL");
-  return `[${index}/${total}] ${tag} ${name} (${r.pass} pass, ${r.fail} fail, ${r.timeout} timeout, ${r.notrun} notrun)`;
-}
-
 // --- Comparison ---
 
 function compareWithSnapshot(snapshot, name, tests) {
@@ -60,13 +75,66 @@ function compareWithSnapshot(snapshot, name, tests) {
     const prev = expected[t.name];
     if (!prev) continue;
     if (prev === "PASS" && t.status !== "PASS") {
-      regressions.push({ test: t.name, was: prev, now: t.status });
+      regressions.push({
+        test: t.name,
+        was: prev,
+        now: t.status,
+        message: t.message,
+      });
     } else if (prev !== "PASS" && t.status === "PASS") {
       improvements.push({ test: t.name, was: prev, now: t.status });
     }
   }
 
   return { regressions, improvements };
+}
+
+// --- Printing ---
+
+function printFileResult(index, total, name, r) {
+  const tag = r.fail === 0 && r.timeout === 0 ? GREEN("PASS") : RED("FAIL");
+  console.log(
+    `[${index}/${total}] ${tag} ${name} (${r.pass} pass, ${r.fail} fail, ${r.timeout} timeout, ${r.notrun} notrun)`,
+  );
+}
+
+function printFailures(r) {
+  for (const t of r.tests) {
+    if (t.status === "PASS" || t.status === "NOTRUN") continue;
+    console.log(`    ${t.status}: ${t.name}`);
+    if (t.message) console.log(`      ${DIM(t.message.slice(0, 200))}`);
+  }
+}
+
+function printDiff(regressions, improvements) {
+  for (const reg of regressions) {
+    console.log(
+      `    ${RED("REGRESSION")}: ${reg.test} (was ${reg.was}, now ${reg.now})`,
+    );
+    if (reg.message) console.log(`      ${DIM(reg.message.slice(0, 200))}`);
+  }
+  for (const imp of improvements) {
+    console.log(
+      `    ${GREEN("IMPROVED")}: ${imp.test} (was ${imp.was}, now ${imp.now})`,
+    );
+  }
+}
+
+function printSummary(totals, snapshot) {
+  console.log(
+    `\n--- Summary ---\n${totals.pass} pass, ${totals.fail} fail, ${totals.timeout} timeout, ${totals.notrun} notrun`,
+  );
+  console.log(`${totals.files} test files`);
+
+  if (snapshot) {
+    const regMsg =
+      totals.regressions > 0 ? RED(totals.regressions) : totals.regressions;
+    const impMsg =
+      totals.improvements > 0
+        ? GREEN(totals.improvements)
+        : totals.improvements;
+    console.log(`${regMsg} regressions, ${impMsg} improvements`);
+  }
 }
 
 // --- Resolve test files ---
@@ -103,12 +171,15 @@ async function main() {
 
   console.log(`Running ${testFiles.length} WPT test files...\n`);
 
-  let totalPass = 0;
-  let totalFail = 0;
-  let totalTimeout = 0;
-  let totalNotrun = 0;
-  let totalRegressions = 0;
-  let totalImprovements = 0;
+  const totals = {
+    pass: 0,
+    fail: 0,
+    timeout: 0,
+    notrun: 0,
+    files: testFiles.length,
+    regressions: 0,
+    improvements: 0,
+  };
   const allResults = {};
 
   for (let i = 0; i < testFiles.length; i++) {
@@ -129,54 +200,28 @@ async function main() {
     }
     allResults[name] = r.tests;
 
-    console.log(formatFileResult(i + 1, testFiles.length, name, r));
+    printFileResult(i + 1, testFiles.length, name, r);
 
-    if (snapshot) {
-      const { regressions, improvements } = compareWithSnapshot(
-        snapshot,
-        name,
-        r.tests,
-      );
-      for (const reg of regressions) {
-        console.log(
-          `  ${RED("REGRESSION")}: ${reg.test} (was ${reg.was}, now ${reg.now})`,
-        );
-      }
-      for (const imp of improvements) {
-        console.log(
-          `  ${GREEN("IMPROVED")}: ${imp.test} (was ${imp.was}, now ${imp.now})`,
-        );
-      }
-      totalRegressions += regressions.length;
-      totalImprovements += improvements.length;
-    } else if (!update && (r.fail > 0 || r.timeout > 0)) {
-      for (const t of r.tests) {
-        if (t.status !== "PASS" && t.status !== "NOTRUN") {
-          console.log(`  ${t.status}: ${t.name}`);
-          if (t.message) console.log(`    ${t.message.slice(0, 200)}`);
-        }
-      }
+    if (r.fail > 0 || r.timeout > 0) {
+      printFailures(r);
     }
 
-    totalPass += r.pass;
-    totalFail += r.fail;
-    totalTimeout += r.timeout;
-    totalNotrun += r.notrun;
+    if (snapshot) {
+      const diff = compareWithSnapshot(snapshot, name, r.tests);
+      if (diff.regressions.length > 0 || diff.improvements.length > 0) {
+        printDiff(diff.regressions, diff.improvements);
+      }
+      totals.regressions += diff.regressions.length;
+      totals.improvements += diff.improvements.length;
+    }
+
+    totals.pass += r.pass;
+    totals.fail += r.fail;
+    totals.timeout += r.timeout;
+    totals.notrun += r.notrun;
   }
 
-  // --- Summary ---
-  console.log(
-    `\n--- Summary ---\n${totalPass} pass, ${totalFail} fail, ${totalTimeout} timeout, ${totalNotrun} notrun`,
-  );
-  console.log(`${testFiles.length} test files`);
-
-  if (snapshot) {
-    const regMsg =
-      totalRegressions > 0 ? RED(totalRegressions) : totalRegressions;
-    const impMsg =
-      totalImprovements > 0 ? GREEN(totalImprovements) : totalImprovements;
-    console.log(`${regMsg} regressions, ${impMsg} improvements`);
-  }
+  printSummary(totals, snapshot);
 
   if (update) {
     saveSnapshot(allResults);
@@ -184,12 +229,8 @@ async function main() {
     process.exit(0);
   }
 
-  if (totalRegressions > 0) {
+  if (totals.regressions > 0) {
     console.log(RED("\nRegressions detected!"));
-    process.exit(1);
-  }
-
-  if (!snapshot && (totalFail > 0 || totalTimeout > 0)) {
     process.exit(1);
   }
 

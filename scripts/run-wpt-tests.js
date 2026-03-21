@@ -102,9 +102,14 @@ const RUNNABLE = [
 // Tests that hang (exceed timeout) due to ICE/media operations that never
 // complete in Node.js. Excluded from all sets.
 // eslint-disable-next-line no-unused-vars
-const KNOWN_HANG = [
+const EXCLUDED = [
+  // pc.close() blocks when iceCandidatePoolSize is large (e.g. 255) because
+  // the network thread is saturated with pool pre-fetch sessions and
+  // Close()'s BlockingCall to the network thread can't proceed.
   "RTCConfiguration-iceCandidatePoolSize.html",
-  "RTCPeerConnection-remote-track-properties.https.html", // hangs on some machines
+  // Hangs on some machines — likely same network thread saturation from
+  // ICE operations that keep the network thread busy during cleanup.
+  "RTCPeerConnection-remote-track-properties.https.html",
 ];
 
 const sets = {
@@ -160,6 +165,13 @@ try {
     `node --expose-gc --unhandled-rejections=none ${runner} ${flags} ${files.join(" ")}`,
     { stdio: "inherit" },
   );
-} catch {
-  process.exit(1);
+} catch (e) {
+  if (e.signal) {
+    console.error(`\nWPT runner killed by signal: ${e.signal}`);
+  } else if (e.status) {
+    // Normal exit with non-zero status (regressions detected)
+  } else {
+    console.error(`\nWPT runner error: ${e.message}`);
+  }
+  process.exit(e.status || 1);
 }
