@@ -37,6 +37,7 @@ const ALL_PASS = [
   "RTCRtpTransceiver-stop.html",
   "RTCSctpTransport-constructor.html",
   "RTCSctpTransport-maxChannels.html",
+  "RTCConfiguration-iceCandidatePoolSize.html",
   "RTCConfiguration-rtcpMuxPolicy.html",
   "RTCPeerConnection-constructor.html",
   "getstats.html",
@@ -75,6 +76,7 @@ const RUNNABLE = [
   "RTCPeerConnection-onnegotiationneeded.html",
   "RTCPeerConnection-onsignalingstatechanged.https.html",
   "RTCPeerConnection-ontrack.https.html",
+  "RTCPeerConnection-remote-track-properties.https.html",
   "RTCPeerConnection-operations.https.html",
   "RTCPeerConnection-restartIce.https.html",
   "RTCPeerConnection-setLocalDescription-answer.html",
@@ -99,17 +101,10 @@ const RUNNABLE = [
   "historical.html",
 ];
 
-// Tests that hang (exceed timeout) due to ICE/media operations that never
-// complete in Node.js. Excluded from all sets.
 // eslint-disable-next-line no-unused-vars
 const EXCLUDED = [
-  // pc.close() blocks when iceCandidatePoolSize is large (e.g. 255) because
-  // the network thread is saturated with pool pre-fetch sessions and
-  // Close()'s BlockingCall to the network thread can't proceed.
-  "RTCConfiguration-iceCandidatePoolSize.html",
-  // Hangs on some machines — likely same network thread saturation from
-  // ICE operations that keep the network thread busy during cleanup.
-  "RTCPeerConnection-remote-track-properties.https.html",
+  // (empty — previously excluded tests now pass after fixing ICE pool
+  // cleanup in Close(); see RTCPeerConnection::Close() in C++)
 ];
 
 const sets = {

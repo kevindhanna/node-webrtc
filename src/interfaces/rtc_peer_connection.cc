@@ -795,6 +795,18 @@ Napi::Value RTCPeerConnection::Close(const Napi::CallbackInfo &info) {
         track->OnPeerConnectionClosed();
       }
     }
+    // Drain the ICE candidate pool before closing. SetConfiguration with
+    // pool size 0 cancels any in-flight pre-fetch sessions on the network
+    // thread. Without this, sessions allocated via SetConfiguration() are
+    // not fully torn down by PeerConnection::Close(), causing the network
+    // thread to remain busy and blocking subsequent Close() calls
+    // indefinitely.
+    auto config = _jinglePeerConnection->GetConfiguration();
+    if (config.ice_candidate_pool_size > 0) {
+      config.ice_candidate_pool_size = 0;
+      _jinglePeerConnection->SetConfiguration(config);
+    }
+
     _jinglePeerConnection->Close();
   }
 

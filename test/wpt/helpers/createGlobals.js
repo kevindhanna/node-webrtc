@@ -88,7 +88,33 @@ function createWindow() {
     peerConnections.length = 0;
   }
 
-  return { dom, window, closeAllPeerConnections };
+  // Close PCs that have network activity (ICE pool or active
+  // connections) to prevent resource accumulation between subtests.
+  // PCs still in "new" state with no pool are left alive — some WPT
+  // tests reuse an idle PC across subtests (e.g. window.pc in
+  // RTCPeerConnection-constructor).
+  function closeBusyPeerConnections() {
+    for (let i = peerConnections.length - 1; i >= 0; i--) {
+      try {
+        const pc = peerConnections[i];
+        if (pc.connectionState === "closed") {
+          peerConnections.splice(i, 1);
+          continue;
+        }
+        const config = pc.getConfiguration();
+        const hasPool = config && config.iceCandidatePoolSize > 0;
+        const hasActivity = pc.connectionState !== "new";
+        if (hasPool || hasActivity) {
+          pc.close();
+          peerConnections.splice(i, 1);
+        }
+      } catch {
+        peerConnections.splice(i, 1);
+      }
+    }
+  }
+
+  return { dom, window, closeAllPeerConnections, closeBusyPeerConnections };
 }
 
 module.exports = { createWindow };

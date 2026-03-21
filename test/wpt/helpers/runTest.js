@@ -9,7 +9,8 @@ const { extractScriptsFromHtml } = require("./extractScriptsFromHtml.js");
 function runTest(htmlPath) {
   return new Promise((resolve) => {
     const scripts = extractScriptsFromHtml(htmlPath);
-    const { dom, window, closeAllPeerConnections } = createWindow();
+    const { dom, window, closeAllPeerConnections, closeBusyPeerConnections } =
+      createWindow();
 
     const results = { pass: 0, fail: 0, timeout: 0, notrun: 0, tests: [] };
     let resolved = false;
@@ -98,8 +99,9 @@ function runTest(htmlPath) {
           };
           /* eslint-enable camelcase */
 
-          // Expose cleanup function to jsdom context
+          // Expose cleanup functions to jsdom context
           window._closeAllPCs = closeAllPeerConnections;
+          window._closeBusyPCs = closeBusyPeerConnections;
 
           execScript(`
             setup({ output: false });
@@ -107,7 +109,7 @@ function runTest(htmlPath) {
               _on_complete(tests, harness_status);
             });
             add_result_callback(function() {
-              _closeAllPCs();
+              _closeBusyPCs();
             });
           `);
         }
