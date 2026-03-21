@@ -204,6 +204,7 @@ list(APPEND GN_GEN_ARGS
   rtc_include_pulse_audio=false
   rtc_include_tests=false
   use_lld=false
+  thin_archive=false
   "${NIX_GN_GEN_ARGS}"
 )
 
@@ -276,24 +277,49 @@ else()
   )
 endif()
 
-ExternalProject_Add(
-  project_libwebrtc
+option(SKIP_WEBRTC_BUILD "Skip building WebRTC (use prebuilt libs)" OFF)
 
-  PREFIX            ${CMAKE_BINARY_DIR}/external/libwebrtc/prefix
-  TMP_DIR           ${CMAKE_BINARY_DIR}/external/libwebrtc/tmp
-  STAMP_DIR         ${CMAKE_BINARY_DIR}/external/libwebrtc/stamp
-  DOWNLOAD_DIR      ${CMAKE_BINARY_DIR}/external/libwebrtc/download
-  SOURCE_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/download/src
-  BINARY_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/build/${CMAKE_BUILD_TYPE}
+if(SKIP_WEBRTC_BUILD)
+  # Skip downloading and building WebRTC entirely. Headers and prebuilt
+  # .a/.o files must already be in place. Run scripts/download-prebuilt-webrtc.sh
+  # before cmake-js build to set them up.
+  ExternalProject_Add(
+    project_libwebrtc
 
-  BUILD_BYPRODUCTS  ${byproducts}
+    PREFIX            ${CMAKE_BINARY_DIR}/external/libwebrtc/prefix
+    TMP_DIR           ${CMAKE_BINARY_DIR}/external/libwebrtc/tmp
+    STAMP_DIR         ${CMAKE_BINARY_DIR}/external/libwebrtc/stamp
+    DOWNLOAD_DIR      ${CMAKE_BINARY_DIR}/external/libwebrtc/download
+    SOURCE_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/download/src
+    BINARY_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/build/${CMAKE_BUILD_TYPE}
 
-  DOWNLOAD_COMMAND  ${CMAKE_COMMAND} -E env DEPOT_TOOLS=${depot_tools_install_dir} PLATFORM=${PLATFORM} WEBRTC_REVISION=${WEBRTC_REVISION} ${CMAKE_SOURCE_DIR}/scripts/download-webrtc.${suffix}
-  PATCH_COMMAND     ${CMAKE_SOURCE_DIR}/scripts/patch-webrtc.sh <SOURCE_DIR> ${CMAKE_SOURCE_DIR}/patches
-  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env BINARY_DIR=<BINARY_DIR> DEPOT_TOOLS=${depot_tools_install_dir} GN_GEN_ARGS=${GN_GEN_ARGS} SOURCE_DIR=<SOURCE_DIR> ${CMAKE_SOURCE_DIR}/scripts/configure-webrtc.${suffix}
-  BUILD_COMMAND     ${CMAKE_COMMAND} -E env CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} DEPOT_TOOLS=${depot_tools_install_dir} ${CMAKE_SOURCE_DIR}/scripts/build-webrtc.${suffix}
-  INSTALL_COMMAND   ""
-)
+    BUILD_BYPRODUCTS  ${byproducts}
+
+    DOWNLOAD_COMMAND  ""
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND     ""
+    INSTALL_COMMAND   ""
+  )
+else()
+  ExternalProject_Add(
+    project_libwebrtc
+
+    PREFIX            ${CMAKE_BINARY_DIR}/external/libwebrtc/prefix
+    TMP_DIR           ${CMAKE_BINARY_DIR}/external/libwebrtc/tmp
+    STAMP_DIR         ${CMAKE_BINARY_DIR}/external/libwebrtc/stamp
+    DOWNLOAD_DIR      ${CMAKE_BINARY_DIR}/external/libwebrtc/download
+    SOURCE_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/download/src
+    BINARY_DIR        ${CMAKE_BINARY_DIR}/external/libwebrtc/build/${CMAKE_BUILD_TYPE}
+
+    BUILD_BYPRODUCTS  ${byproducts}
+
+    DOWNLOAD_COMMAND  ${CMAKE_COMMAND} -E env DEPOT_TOOLS=${depot_tools_install_dir} PLATFORM=${PLATFORM} WEBRTC_REVISION=${WEBRTC_REVISION} ${CMAKE_SOURCE_DIR}/scripts/download-webrtc.${suffix}
+    PATCH_COMMAND     ${CMAKE_SOURCE_DIR}/scripts/patch-webrtc.sh <SOURCE_DIR> ${CMAKE_SOURCE_DIR}/patches
+    CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env BINARY_DIR=<BINARY_DIR> DEPOT_TOOLS=${depot_tools_install_dir} GN_GEN_ARGS=${GN_GEN_ARGS} SOURCE_DIR=<SOURCE_DIR> ${CMAKE_SOURCE_DIR}/scripts/configure-webrtc.${suffix}
+    BUILD_COMMAND     ${CMAKE_COMMAND} -E env CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} DEPOT_TOOLS=${depot_tools_install_dir} ${CMAKE_SOURCE_DIR}/scripts/build-webrtc.${suffix}
+    INSTALL_COMMAND   ""
+  )
+endif()
 
 add_dependencies(project_libwebrtc project_depot_tools)
 
